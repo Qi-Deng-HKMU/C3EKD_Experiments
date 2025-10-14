@@ -171,63 +171,49 @@ class CloudEdgeFramework:
                 node_idx = node_data['node_idx']
                 uploaded_images = node_data['uploaded_images']
                 uploaded_labels = node_data['uploaded_labels']
-                edge_preds = node_data['edge_preds']
+                #edge_preds = node_data['edge_preds']
                 cloud_probs = node_data['cloud_probs']
-                cloud_preds = node_data['cloud_preds']
-                
+                #cloud_preds = node_data['cloud_preds']
+                    
                 logits = self.edge_nodes[node_idx].model(uploaded_images)
                 edge_soft_probs = F.softmax(logits / 3.0, dim=1)
-                
-                consistent_mask = (edge_preds == cloud_preds)
-                
+
+                #consistent_mask = (edge_preds == cloud_preds)
+                    
                 node_total_loss = 0
                 node_loss_count = 0
-                
-                if consistent_mask.sum() > 0:
-                    consistent_edge_probs = edge_soft_probs[consistent_mask]
-                    consistent_cloud_probs = cloud_probs[consistent_mask]
-                    kl_loss = F.kl_div(
-                        torch.log(consistent_edge_probs + 1e-8), 
-                        consistent_cloud_probs, 
-                        reduction='sum'
-                    )
-                    node_total_loss += kl_loss
-                    node_loss_count += consistent_mask.sum().item()
-                        
-                if (~consistent_mask).sum() > 0:
-                    inconsistent_edge_probs = edge_soft_probs[~consistent_mask]
-                    inconsistent_cloud_probs = cloud_probs[~consistent_mask]
-                    inconsistent_labels = uploaded_labels[~consistent_mask]
+                    
 
-                    kl_loss = F.kl_div(
-                        torch.log(inconsistent_edge_probs + 1e-8), 
-                        inconsistent_cloud_probs, 
-                        reduction='sum'
-                    )
-                    
-                    ce_loss = F.cross_entropy(
-                        logits[~consistent_mask], 
-                        inconsistent_labels,
-                        reduction='sum'
-                    )
-                    
-                    node_total_loss += (0.5*kl_loss + 0.5*ce_loss)
-                    node_loss_count += (~consistent_mask).sum().item()
-                
+                kl_loss = F.kl_div(
+                    torch.log(edge_soft_probs + 1e-8), 
+                    cloud_probs, 
+                    reduction='sum'
+                )
+
+                ce_loss = F.cross_entropy(
+                    logits, 
+                    uploaded_labels,
+                    reduction='sum'
+                )
+
+                node_total_loss = 0.3 * kl_loss + 0.7 * ce_loss
+                node_loss_count = len(uploaded_images)
+
+
                 if node_loss_count > 0:
                     node_avg_loss = node_total_loss / node_loss_count
                     round_losses.append(node_avg_loss)
-        
+            
         if len(round_losses) > 0:
             total_round_loss = sum(round_losses) / len(round_losses)
-            
+                
             optimizer.zero_grad()
             total_round_loss.backward()
             optimizer.step()
-            
+                
             updated_state = self.edge_nodes[0].model.state_dict()
             for other_node in self.edge_nodes[1:]:
-                other_node.model.load_state_dict(updated_state)
+                    other_node.model.load_state_dict(updated_state)
         
         for node in self.edge_nodes:
             node.model.eval()
