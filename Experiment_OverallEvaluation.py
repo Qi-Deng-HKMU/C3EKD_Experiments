@@ -43,8 +43,8 @@ class DelayCalculator:
         # Bandwidth and fixed delay configuration
         self.device_to_edge_bandwidth_mbps = 20  # 20Mbps
         self.edge_to_cloud_bandwidth_mbps = 100  # 100Mbps
-        self.device_to_edge_fixed_delay_ms = 5   # 5ms fixed delay
-        self.edge_to_cloud_fixed_delay_ms = 20   # 20ms fixed delay
+        #self.device_to_edge_fixed_delay_ms = 5   # 5ms fixed delay
+        #self.edge_to_cloud_fixed_delay_ms = 20   # 20ms fixed delay
         
     def calculate_transmission_delay(self, num_images, from_device_to_edge=True):
         """Calculate transmission delay (ms)"""
@@ -52,14 +52,13 @@ class DelayCalculator:
             # edge devices to edge servers
             bandwidth_bps = self.device_to_edge_bandwidth_mbps * 1_000_000  # convert into bps
             transmission_time_s = (self.image_size_bits * num_images) / bandwidth_bps
-            transmission_time_ms = transmission_time_s * 1000
-            total_delay_ms = transmission_time_ms + self.device_to_edge_fixed_delay_ms
+            total_delay_ms = transmission_time_s * 1000
+            
         else:
             # edge servers to the cloud server
             bandwidth_bps = self.edge_to_cloud_bandwidth_mbps * 1_000_000  # convert into bps
             transmission_time_s = (self.image_size_bits * num_images) / bandwidth_bps
-            transmission_time_ms = transmission_time_s * 1000
-            total_delay_ms = transmission_time_ms + self.edge_to_cloud_fixed_delay_ms
+            total_delay_ms = transmission_time_s * 1000
         
         return total_delay_ms
 
@@ -100,25 +99,25 @@ class CloudEdgeFramework:
         node = self.edge_nodes[self.current_node_idx]
         self.current_node_idx = (self.current_node_idx + 1) % len(self.edge_nodes)
         
-        start_time = time.time()
+        #start_time = time.time()
         probs = node.predict(images)
-        end_time = time.time()
-        inference_time_ms = (end_time - start_time) * 1000
+        #end_time = time.time()
+        #inference_time_ms = (end_time - start_time) * 1000
 
         confidence = self.compute_confidence(probs)
         predictions = torch.argmax(probs, dim=1)
-        return probs, confidence, predictions, inference_time_ms
+        return probs, confidence, predictions
     
     def cloud_inference(self, images, temperature=3.0):
         """Cloud inference"""
-        start_time = time.time()
+        #start_time = time.time()
         with torch.no_grad():
             logits = self.cloud_model(images)
             soft_probs = F.softmax(logits / temperature, dim=1)
             predictions = torch.argmax(soft_probs, dim=1)
-        end_time = time.time()
-        inference_time_ms = (end_time - start_time) * 1000
-        return soft_probs, predictions, inference_time_ms
+        #end_time = time.time()
+        #inference_time_ms = (end_time - start_time) * 1000
+        return soft_probs, predictions
     
     def collaborative_inference(self, images, threshold):
         """Cloud-edge collaboratie inference"""
@@ -129,13 +128,13 @@ class CloudEdgeFramework:
             num_images, from_device_to_edge=True
         )
 
-        edge_probs, confidence, edge_preds, edge_inference_time = self.edge_inference(images)
+        _, confidence, edge_preds = self.edge_inference(images)
         
         upload_mask = confidence < threshold
         upload_count = upload_mask.sum().item()
         
         final_predictions = edge_preds.clone()
-        total_delay = device_to_edge_delay + edge_inference_time
+        total_delay = device_to_edge_delay
         
         if upload_count > 0:
             # Time delay from edge servers to the cloud server
@@ -144,10 +143,10 @@ class CloudEdgeFramework:
             )
 
             uploaded_images = images[upload_mask]
-            cloud_probs, cloud_preds, cloud_inference_time = self.cloud_inference(uploaded_images)
+            _, cloud_preds = self.cloud_inference(uploaded_images)
             final_predictions[upload_mask] = cloud_preds
 
-            total_delay += edge_to_cloud_delay + cloud_inference_time
+            total_delay += edge_to_cloud_delay
         
         upload_ratio = upload_count / len(images)
         
@@ -188,17 +187,17 @@ class CloudEdgeFramework:
                     num_images, from_device_to_edge=True
                 )
                 
-                start_time = time.time()
+                #start_time = time.time()
                 edge_probs = self.edge_nodes[node_idx].predict(batch_images)
-                end_time = time.time()
-                edge_inference_time = (end_time - start_time) * 1000
+                #end_time = time.time()
+                #edge_inference_time = (end_time - start_time) * 1000
 
                 confidence = self.compute_confidence(edge_probs)
                 upload_mask = confidence < threshold
                 upload_count = upload_mask.sum().item()
                 total_upload_count += upload_count
                 
-                batch_delay = device_to_edge_delay + edge_inference_time
+                batch_delay = device_to_edge_delay
                 
                 if upload_count > 0:
                     edge_to_cloud_delay = self.delay_calculator.calculate_transmission_delay(
@@ -206,13 +205,13 @@ class CloudEdgeFramework:
                     )
                     
                     uploaded_images = batch_images[upload_mask]
-                    start_time = time.time()
+                    #start_time = time.time()
                     with torch.no_grad():
                         _ = self.cloud_model(uploaded_images)
-                    end_time = time.time()
-                    cloud_inference_time = (end_time - start_time) * 1000
+                    #end_time = time.time()
+                    #cloud_inference_time = (end_time - start_time) * 1000
                     
-                    batch_delay += edge_to_cloud_delay + cloud_inference_time
+                    batch_delay += edge_to_cloud_delay 
                 
                 total_time_delay += batch_delay
         
@@ -268,10 +267,10 @@ class CloudEdgeFramework:
                 device_to_edge_delay = self.delay_calculator.calculate_transmission_delay(
                 num_images, from_device_to_edge=True)
 
-                start_time = time.time()
+                #start_time = time.time()
                 edge_logits = self.edge_nodes[node_idx].model(batch_images)
-                end_time = time.time()
-                edge_inference_time = (end_time - start_time) * 1000  # convert into ms
+                #end_time = time.time()
+                #edge_inference_time = (end_time - start_time) * 1000  # convert into ms
 
                 edge_probs = F.softmax(edge_logits, dim=1)
                 confidence = self.compute_confidence(edge_probs)
@@ -283,7 +282,7 @@ class CloudEdgeFramework:
                 total_upload_count += upload_count
                 total_samples += len(batch_images)
                 
-                batch_delay = device_to_edge_delay + edge_inference_time
+                batch_delay = device_to_edge_delay 
 
                 node_upload_data = {
                     'node_idx': node_idx,
@@ -303,8 +302,8 @@ class CloudEdgeFramework:
                         upload_count, from_device_to_edge=False
                     )  
 
-                    cloud_probs, cloud_preds, cloud_inference_time = self.cloud_inference(uploaded_images, temperature=3.0)
-                    batch_delay += edge_to_cloud_delay + cloud_inference_time
+                    cloud_probs, cloud_preds = self.cloud_inference(uploaded_images, temperature=3.0)
+                    batch_delay += edge_to_cloud_delay
 
                     node_upload_data.update({
                         'has_upload': True,
@@ -325,18 +324,19 @@ class CloudEdgeFramework:
                     node_idx = node_data['node_idx']
                     uploaded_images = node_data['uploaded_images']
                     uploaded_labels = node_data['uploaded_labels']
-                    edge_preds = node_data['edge_preds']
+                    #edge_preds = node_data['edge_preds']
                     cloud_probs = node_data['cloud_probs']
-                    cloud_preds = node_data['cloud_preds']
+                    #cloud_preds = node_data['cloud_preds']
                     
                     logits = self.edge_nodes[node_idx].model(uploaded_images)
                     edge_soft_probs = F.softmax(logits / 3.0, dim=1)
 
-                    consistent_mask = (edge_preds == cloud_preds)
+                    #consistent_mask = (edge_preds == cloud_preds)
                     
                     node_total_loss = 0
                     node_loss_count = 0
                     
+                    '''
                     if consistent_mask.sum() > 0:
                         consistent_edge_probs = edge_soft_probs[consistent_mask]
                         consistent_cloud_probs = cloud_probs[consistent_mask]
@@ -367,6 +367,22 @@ class CloudEdgeFramework:
                         
                         node_total_loss += (0.5*kl_loss + 0.5*ce_loss)
                         node_loss_count += (~consistent_mask).sum().item()
+                    '''
+                    kl_loss = F.kl_div(
+                        torch.log(edge_soft_probs + 1e-8), 
+                        cloud_probs, 
+                        reduction='sum'
+                    )
+
+                    ce_loss = F.cross_entropy(
+                        logits, 
+                        uploaded_labels,
+                        reduction='sum'
+                    )
+
+                    node_total_loss = 0.3 * kl_loss + 0.7 * ce_loss
+                    node_loss_count = len(uploaded_images)
+
 
                     if node_loss_count > 0:
                         node_avg_loss = node_total_loss / node_loss_count
@@ -427,12 +443,12 @@ class CloudEdgeFramework:
                 )
                 
 
-                start_time = time.time()
+                #start_time = time.time()
                 _ = self.edge_nodes[node_idx].predict(batch_images)
-                end_time = time.time()
-                edge_inference_time = (end_time - start_time) * 1000
+                #end_time = time.time()
+                #edge_inference_time = (end_time - start_time) * 1000
                 
-                batch_delay = device_to_edge_delay + edge_inference_time
+                batch_delay = device_to_edge_delay #+ edge_inference_time
                 total_time_delay += batch_delay
 
         avg_time_delay = round(total_time_delay/2880.0, 3)
@@ -441,54 +457,23 @@ class CloudEdgeFramework:
     def calculate_pure_cloud_delay(self, sim_dataset):
 
         total_time_delay = 0
-        total_samples = len(sim_dataset)
+        num_images = len(sim_dataset)
         
-
-        indices = list(range(total_samples))
-        
-        for round_idx in range(0, total_samples, 48):
-            round_indices = indices[round_idx:round_idx + 48]
-            
-            for node_idx in range(3):
-                start_idx = node_idx * 16
-                end_idx = min(start_idx + 16, len(round_indices))
-                if start_idx >= len(round_indices):
-                    break
-                    
-                node_indices = round_indices[start_idx:end_idx]
-                
-                node_images = []
-                for idx in node_indices:
-                    img, _ = sim_dataset[idx]
-                    node_images.append(img)
-                
-                if len(node_images) == 0:
-                    continue
-                
-                batch_images = torch.stack(node_images).to(device)
-                num_images = len(batch_images)
                 
 
-                device_to_edge_delay = self.delay_calculator.calculate_transmission_delay(
-                    num_images, from_device_to_edge=True
-                )
+        device_to_edge_delay = self.delay_calculator.calculate_transmission_delay(
+            num_images, from_device_to_edge=True
+        )
                 
 
-                edge_to_cloud_delay = self.delay_calculator.calculate_transmission_delay(
+        edge_to_cloud_delay = self.delay_calculator.calculate_transmission_delay(
                     num_images, from_device_to_edge=False
                 )
                 
-
-                start_time = time.time()
-                with torch.no_grad():
-                    _ = self.cloud_model(batch_images)
-                end_time = time.time()
-                cloud_inference_time = (end_time - start_time) * 1000
                 
-                batch_delay = device_to_edge_delay + edge_to_cloud_delay + cloud_inference_time
-                total_time_delay += batch_delay
+        total_time_delay += device_to_edge_delay + edge_to_cloud_delay
         
-        avg_time_delay = round(total_time_delay/2880.0, 3)
+        avg_time_delay = round(total_time_delay/num_images, 3)
         return avg_time_delay
 
 def evaluate_paradigm_test_only(framework, test_loader, paradigm, threshold_):
@@ -503,12 +488,12 @@ def evaluate_paradigm_test_only(framework, test_loader, paradigm, threshold_):
         labels = labels.to(device)
             
         if paradigm == 'edge':
-            _, _, predictions, _ = framework.edge_inference(images)
+            _, _, predictions = framework.edge_inference(images)
                 
         elif paradigm == 'cloud':
-            _, predictions, _ = framework.cloud_inference(images)
+            _, predictions = framework.cloud_inference(images)
                 
-        elif paradigm in  ['confidence_0.1', 'confidence_0.2', 'confidence_0.3','confidence_no_update_0.2']:
+        elif paradigm in  ['confidence_0.1', 'confidence_0.2', 'confidence_0.3','confidence_no_update_0.1', 'confidence_no_update_0.2', 'confidence_no_update_0.3']:
             predictions, _, _ = framework.collaborative_inference(
                 images, threshold=threshold_
             )
@@ -546,8 +531,8 @@ def main():
     print("Paradigm Comparison Experiment")
     print("="*50)
 
-    paradigms = ['edge', 'cloud', 'confidence_0.1', 'confidence_0.2', 'confidence_0.3', 'confidence_no_update_0.2']
-    paradigm_names = ['Edge 1 + Edge 2 + Edge 3', 'Pure Cloud', 'CCEKL0.1', 'CCEKL0.2', 'CCEKL0.3', 'CCEKL_noupdate0.2']
+    paradigms = ['edge', 'cloud', 'confidence_0.1', 'confidence_0.2', 'confidence_0.3', 'confidence_no_update_0.1', 'confidence_no_update_0.2', 'confidence_no_update_0.3']
+    paradigm_names = ['Edge 1 + Edge 2 + Edge 3', 'Pure Cloud', 'CCEKL0.1', 'CCEKL0.2', 'CCEKL0.3', 'CCEKL_noupdate0.1', 'CCEKL_noupdate0.2', 'CCEKL_noupdate0.3']
     
     results = []
     
@@ -572,9 +557,17 @@ def main():
             upload_prop_sim, time_delay_sim = framework.simulate_communication_rounds(sim_dataset, threshold=0.3)
             threshold = 0.3
 
+        elif paradigm == 'confidence_no_update_0.1':
+            upload_prop_sim, time_delay_sim = framework.calculate_collaborative_no_update_delay(sim_dataset, threshold=0.1)
+            threshold = 0.1
+
         elif paradigm == 'confidence_no_update_0.2':
             upload_prop_sim, time_delay_sim = framework.calculate_collaborative_no_update_delay(sim_dataset, threshold=0.2)
             threshold = 0.2
+
+        elif paradigm == 'confidence_no_update_0.3':
+            upload_prop_sim, time_delay_sim = framework.calculate_collaborative_no_update_delay(sim_dataset, threshold=0.3)
+            threshold = 0.3
 
         elif paradigm == 'edge':
             upload_prop_sim = 0.0  # no uploads
